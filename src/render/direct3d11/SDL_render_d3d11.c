@@ -33,15 +33,15 @@
 #include "../SDL_sysrender.h"
 #include "../SDL_d3dmath.h"
 
-#include <d3d11_1.h>
+#include <d3d11_2.h>
 
 #include "SDL_shaders_d3d11.h"
-
-#ifdef __WINRT__
 
 #if NTDDI_VERSION > NTDDI_WIN8
 #include <DXGI1_3.h>
 #endif
+
+#ifdef __WINRT__
 
 #include "SDL_render_winrt.h"
 
@@ -164,6 +164,7 @@ typedef struct
     SDL_bool viewportDirty;
     Float4X4 identity;
     int currentVertexBuffer;
+    HANDLE renderFrameLatencyWait;
 } D3D11_RenderData;
 
 
@@ -181,7 +182,8 @@ typedef struct
 #pragma GCC diagnostic ignored "-Wunused-const-variable"
 #endif
 
-static const GUID SDL_IID_IDXGIFactory2 = { 0x50c83a1c, 0xe072, 0x4c48, { 0x87, 0xb0, 0x36, 0x30, 0xfa, 0x36, 0xa6, 0xd0 } };
+static const GUID SDL_IID_IDXGIFactory2 = { 0x50c83a1c, 0xe072, 0x4c48, 0x87, 0xb0, 0x36, 0x30,0xfa,0x36,0xa6,0xd0 };
+static const GUID SDL_IID_IDXGISwapChain2 = { 0xa8be2ac4,0x199f,0x4946,0xb3,0x31,0x79,0x59,0x9f,0xb9,0x8d,0xe7 };
 static const GUID SDL_IID_IDXGIDevice1 = { 0x77db970f, 0x6276, 0x48ba, { 0xba, 0x28, 0x07, 0x01, 0x43, 0xb4, 0x39, 0x2c } };
 #if defined(__WINRT__) && NTDDI_VERSION > NTDDI_WIN8
 static const GUID SDL_IID_IDXGIDevice3 = { 0x6007896c, 0x3244, 0x4afd, { 0xbf, 0x18, 0xa6, 0xd3, 0xbe, 0xda, 0x50, 0x23 } };
@@ -435,6 +437,8 @@ D3D11_CreateDeviceResources(SDL_Renderer * renderer)
     D3D11_SAMPLER_DESC samplerDesc;
     D3D11_RASTERIZER_DESC rasterDesc;
 
+    data->renderFrameLatencyWait = NULL;
+
 #ifdef __WINRT__
     CreateDXGIFactoryFunc = CreateDXGIFactory1;
     D3D11CreateDeviceFunc = D3D11CreateDevice;
@@ -524,12 +528,14 @@ D3D11_CreateDeviceResources(SDL_Renderer * renderer)
     }
 
     /* Ensure that DXGI does not queue more than one frame at a time. This both reduces latency and
-     * ensures that the application will only render after each VSync, minimizing power consumption.
-     */
-    result = IDXGIDevice1_SetMaximumFrameLatency(dxgiDevice, 1);
-    if (FAILED(result)) {
-        WIN_SetErrorFromHRESULT(SDL_COMPOSE_ERROR("IDXGIDevice1::SetMaximumFrameLatency"), result);
-        goto done;
+    * ensures that the application will only render after each VSync, minimizing power consumption.
+    */
+    if (!data->renderFrameLatencyWait) {
+        result = IDXGIDevice1_SetMaximumFrameLatency(dxgiDevice, 1);
+        if (FAILED(result)) {
+            WIN_SetErrorFromHRESULT(SDL_COMPOSE_ERROR("IDXGIDevice1::SetMaximumFrameLatency"), result);
+            goto done;
+        }
     }
 
     /* Make note of the maximum texture size
@@ -774,7 +780,8 @@ D3D11_CreateSwapChain(SDL_Renderer * renderer, int w, int h)
     }
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL; /* All Windows Store apps must use this SwapEffect. */
 #endif
-    swapChainDesc.Flags = 0;
+    swapChainDesc.Flags = (renderer->info.flags & SDL_RENDERER_WAIT_SWAPCHAIN) ?
+                          DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT : 0;
 
     if (coreWindow) {
         result = IDXGIFactory2_CreateSwapChainForCoreWindow(data->dxgiFactory,
@@ -839,6 +846,28 @@ D3D11_CreateSwapChain(SDL_Renderer * renderer, int w, int h)
 
 done:
     SAFE_RELEASE(coreWindow);
+
+    /* If the user has requested the use of the flip model swap chain, create a
+    waitable object for backbuffer synchronization. This allows for
+    lower latency than the one frame queue offered by
+    IDXGIDevice1_SetMaximumFrameLatency(dxgiDevice, 1). */
+    if (renderer->info.flags & SDL_RENDERER_WAIT_SWAPCHAIN) {
+        IDXGISwapChain2 *swp2 = NULL;
+        const HRESULT hr = IDXGISwapChain1_QueryInterface(data->swapChain, &SDL_IID_IDXGISwapChain2,
+            (void **)&swp2);
+        if (SUCCEEDED(hr)) {
+            IDXGISwapChain2_SetMaximumFrameLatency(swp2, 0);
+            data->renderFrameLatencyWait = IDXGISwapChain2_GetFrameLatencyWaitableObject(swp2);
+            IDXGISwapChain2_Release(swp2);
+        }
+    }
+
+    /* Wait for the backbuffer to be ready before allowing anything to be
+       rendered. This is key to reducing latency. */
+    if (data->renderFrameLatencyWait) {
+        WaitForSingleObjectEx(data->renderFrameLatencyWait, 100, TRUE);
+    }
+
     return result;
 }
 
@@ -2596,6 +2625,11 @@ D3D11_RenderPresent(SDL_Renderer * renderer)
             WIN_SetErrorFromHRESULT(SDL_COMPOSE_ERROR("IDXGISwapChain::Present"), result);
         }
     }
+
+    if (data->renderFrameLatencyWait)
+    {
+        WaitForSingleObjectEx(data->renderFrameLatencyWait, 100, TRUE);
+    }
 }
 
 SDL_Renderer *
@@ -2667,6 +2701,10 @@ D3D11_CreateRenderer(SDL_Window * window, Uint32 flags)
         renderer->info.flags |= SDL_RENDERER_PRESENTVSYNC;
     }
 #endif
+
+    // TODO: Properly detect whether we are >= Win8 at runtime for this.
+    if (flags & SDL_RENDERER_WAIT_SWAPCHAIN)
+        renderer->info.flags |= SDL_RENDERER_WAIT_SWAPCHAIN;
 
     /* HACK: make sure the SDL_Renderer references the SDL_Window data now, in
      * order to give init functions access to the underlying window handle:
