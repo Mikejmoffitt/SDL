@@ -3862,6 +3862,15 @@ SDL_RenderReadPixels(SDL_Renderer * renderer, const SDL_Rect * rect,
 }
 
 void
+SDL_RenderWaitForSwapChain(SDL_Renderer *renderer)
+{
+    CHECK_RENDERER_MAGIC(renderer, );
+    if (renderer->RenderWaitForSwapchain) {
+        renderer->RenderWaitForSwapchain(renderer);
+    }
+}
+
+void
 SDL_RenderPresent(SDL_Renderer * renderer)
 {
     CHECK_RENDERER_MAGIC(renderer, );

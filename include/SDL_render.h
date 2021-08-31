@@ -1565,6 +1565,20 @@ extern DECLSPEC int SDLCALL SDL_RenderReadPixels(SDL_Renderer * renderer,
 extern DECLSPEC void SDLCALL SDL_RenderPresent(SDL_Renderer * renderer);
 
 /**
+ * Wait until the swap chain is free for rendering.
+ * 
+ * This is only applicable to renderer drivers where SDL_RENDERER_WAIT_SWAPCHAIN
+ * is being used. As of writing, only Direct3D11 supports this.
+ * 
+ * By waiting until this function returns, it is possible to guarantee that no
+ * latency is incurred by writing to the buffer at the wrong time.
+ * 
+ * \param renderer the rendering context
+ * 
+ */
+extern DECLSPEC void SDLCALL SDL_RenderWaitForSwapChain(SDL_Renderer * renderer);
+
+/**
  * Destroy the specified texture.
  *
  * Passing NULL or an otherwise invalid texture will set the SDL error message

@@ -344,6 +344,7 @@
 #define SDL_RenderCopyEx SDL_RenderCopyEx_REAL
 #define SDL_RenderReadPixels SDL_RenderReadPixels_REAL
 #define SDL_RenderPresent SDL_RenderPresent_REAL
+#define SDL_RenderWaitForSwapChain SDL_RenderWaitForSwapChain_REAL
 #define SDL_DestroyTexture SDL_DestroyTexture_REAL
 #define SDL_DestroyRenderer SDL_DestroyRenderer_REAL
 #define SDL_GL_BindTexture SDL_GL_BindTexture_REAL

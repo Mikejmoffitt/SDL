@@ -2571,6 +2571,16 @@ done:
 }
 
 static void
+D3D11_RenderWaitForSwapchain(SDL_Renderer *renderer)
+{
+    D3D11_RenderData *data = (D3D11_RenderData *) renderer->driverdata;
+    if (data->renderFrameLatencyWait)
+    {
+        WaitForSingleObjectEx(data->renderFrameLatencyWait, 100, TRUE);
+    }
+}
+
+static void
 D3D11_RenderPresent(SDL_Renderer * renderer)
 {
     D3D11_RenderData *data = (D3D11_RenderData *) renderer->driverdata;
@@ -2625,11 +2635,6 @@ D3D11_RenderPresent(SDL_Renderer * renderer)
             WIN_SetErrorFromHRESULT(SDL_COMPOSE_ERROR("IDXGISwapChain::Present"), result);
         }
     }
-
-    if (data->renderFrameLatencyWait)
-    {
-        WaitForSingleObjectEx(data->renderFrameLatencyWait, 100, TRUE);
-    }
 }
 
 SDL_Renderer *
@@ -2677,6 +2682,7 @@ D3D11_CreateRenderer(SDL_Window * window, Uint32 flags)
     renderer->RunCommandQueue = D3D11_RunCommandQueue;
     renderer->RenderReadPixels = D3D11_RenderReadPixels;
     renderer->RenderPresent = D3D11_RenderPresent;
+    renderer->RenderWaitForSwapchain = D3D11_RenderWaitForSwapchain;
     renderer->DestroyTexture = D3D11_DestroyTexture;
     renderer->DestroyRenderer = D3D11_DestroyRenderer;
     renderer->info = D3D11_RenderDriver.info;

@@ -375,6 +375,7 @@ SDL_DYNAPI_PROC(int,SDL_RenderCopy,(SDL_Renderer *a, SDL_Texture *b, const SDL_R
 SDL_DYNAPI_PROC(int,SDL_RenderCopyEx,(SDL_Renderer *a, SDL_Texture *b, const SDL_Rect *c, const SDL_Rect *d, const double e, const SDL_Point *f, const SDL_RendererFlip g),(a,b,c,d,e,f,g),return)
 SDL_DYNAPI_PROC(int,SDL_RenderReadPixels,(SDL_Renderer *a, const SDL_Rect *b, Uint32 c, void *d, int e),(a,b,c,d,e),return)
 SDL_DYNAPI_PROC(void,SDL_RenderPresent,(SDL_Renderer *a),(a),)
+SDL_DYNAPI_PROC(void,SDL_RenderWaitForSwapChain,(SDL_Renderer *a),(a),)
 SDL_DYNAPI_PROC(void,SDL_DestroyTexture,(SDL_Texture *a),(a),)
 SDL_DYNAPI_PROC(void,SDL_DestroyRenderer,(SDL_Renderer *a),(a),)
 SDL_DYNAPI_PROC(int,SDL_GL_BindTexture,(SDL_Texture *a, float *b, float *c),(a,b,c),return)
